@@ -29,8 +29,8 @@ local cfg = {
 	ShowDistance = true,
 	MaxDistance = 500,        -- Distancia máxima (10m a 2000m)
 	FillTrans = 0.5,         -- Transparencia del Highlight
-	TracersEnabled = true,   -- Tracers globales
-	CameraTracers = false,   -- Opcional: Tracers específicos para cámaras
+	TracersEnabled = true,   -- Tracers globales para objetos/cámaras
+	CameraTracers = true,    -- Tracers específicos para cámaras
 	TracerWidth = 0.04,
 	TracerColorMode = "Match",
 	CustomTracerColor = Color3.fromRGB(255, 255, 255),
@@ -55,7 +55,7 @@ Instance.new("UICorner", LoadFrame).CornerRadius = UDim.new(0, 8)
 local LoadTitle = Instance.new("TextLabel", LoadFrame)
 LoadTitle.Size = UDim2.new(1, 0, 1, 0)
 LoadTitle.BackgroundTransparency = 1
-LoadTitle.Text = "Matcha - Fixing ESP Persistence & Camera Tracers..."
+LoadTitle.Text = "Matcha - Fixing Camera & Mobile Controls..."
 LoadTitle.TextColor3 = Color3.fromRGB(255, 105, 180)
 LoadTitle.Font = Enum.Font.Code
 LoadTitle.TextSize = 11
@@ -70,11 +70,12 @@ task.wait(0.2)
 LoadGui:Destroy()
 
 --------------------------------------------------------------------------------
--- 2. INTERFAZ PRINCIPAL
+-- 2. INTERFAZ PRINCIPAL (LIBRE DE BLOQUEO DE CÁMARA MÓVIL)
 --------------------------------------------------------------------------------
 local ScreenGui = Instance.new("ScreenGui", PlayerGui)
 ScreenGui.Name = "Matcha_ProHub"
 ScreenGui.ResetOnSpawn = false
+ScreenGui.DisplayOrder = 999
 
 local MainFrame = Instance.new("Frame", ScreenGui)
 MainFrame.Name = "MainFrame"
@@ -89,12 +90,6 @@ Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 6)
 local MainStroke = Instance.new("UIStroke", MainFrame)
 MainStroke.Color = Color3.fromRGB(45, 45, 60)
 MainStroke.Thickness = 1.2
-
-local ModalBtn = Instance.new("TextButton", MainFrame)
-ModalBtn.Size = UDim2.new(0, 0, 0, 0)
-ModalBtn.Visible = true
-ModalBtn.Modal = true
-ModalBtn.Selectable = false
 
 -- Header
 local Header = Instance.new("Frame", MainFrame)
@@ -214,7 +209,7 @@ ObjTabBtn.MouseButton1Click:Connect(function() switchTab(ObjTabBtn, ObjContainer
 SetTabBtn.MouseButton1Click:Connect(function() switchTab(SetTabBtn, SetContainer) end)
 
 --------------------------------------------------------------------------------
--- 4. FUNCIONES DE LIMPIEZA TOTAL Y TOGGLES
+-- 4. FUNCIONES DE LIMPIEZA Y COMPONENTES
 --------------------------------------------------------------------------------
 local function clearGroup(key)
 	for target, data in pairs(tracked[key]) do
@@ -358,7 +353,7 @@ local function createToggle(parent, labelText, key, scanFunc)
 		if st then
 			scanFunc()
 		else
-			clearGroup(key) -- Limpieza inmediata al desactivar
+			clearGroup(key)
 		end
 	end)
 end
@@ -458,13 +453,13 @@ createSlider(SetContainer, "Fill Transparency", 0.00, 1.00, cfg.FillTrans, false
 createSlider(SetContainer, "Tracer Line Width", 0.01, 0.15, cfg.TracerWidth, false, function(val) cfg.TracerWidth = val end)
 
 createHeaderLabel(SetContainer, "Camera & Tracer Options")
-createDropdown(SetContainer, "⚡ Global Tracers Toggle", {
+createDropdown(SetContainer, "⚡ Objects Tracers Toggle", {
 	{Name = "Tracers: Enabled", Callback = function() cfg.TracersEnabled = true end},
 	{Name = "Tracers: Disabled", Callback = function() cfg.TracersEnabled = false end}
 })
 createDropdown(SetContainer, "📷 Camera Tracers Toggle", {
-	{Name = "Camera Tracers: OFF", Callback = function() cfg.CameraTracers = false end},
-	{Name = "Camera Tracers: ON", Callback = function() cfg.CameraTracers = true end}
+	{Name = "Camera Tracers: ON", Callback = function() cfg.CameraTracers = true end},
+	{Name = "Camera Tracers: OFF", Callback = function() cfg.CameraTracers = false end}
 })
 
 --------------------------------------------------------------------------------
@@ -526,12 +521,11 @@ MinimizeBtn.MouseButton1Click:Connect(function()
 end)
 
 --------------------------------------------------------------------------------
--- 6. LÓGICA DE ESP, TRACERS Y ESCANEO DE CÁMARAS
+-- 6. LÓGICA DE ESP Y TRACERS (SOLO OBJETOS Y CÁMARAS)
 --------------------------------------------------------------------------------
-function addESP(target, listKey, color, isDynamic, text)
+function addESP(target, listKey, color, isDynamic, text, hasTracer)
 	if tracked[listKey][target] then return end
 	
-	-- Selección precisa de la parte principal (Hitbox -> Cabeza -> Base -> PrimaryPart)[cite: 3]
 	local root = target:IsA("Model") and (target:FindFirstChild("Hitbox") or target:FindFirstChild("Cabeza") or target:FindFirstChild("Base") or target.PrimaryPart or target:FindFirstChildWhichIsA("BasePart")) or (target:IsA("BasePart") and target)
 	if not root then return end
 
@@ -556,22 +550,25 @@ function addESP(target, listKey, color, isDynamic, text)
 	lbl.TextSize = 11
 	bb.Parent = target
 
-	local a0 = Instance.new("Attachment", Workspace.Terrain)
-	local a1 = Instance.new("Attachment", root)
-	local beam = Instance.new("Beam", Workspace.Terrain)
-	beam.Attachment0 = a0; beam.Attachment1 = a1
-	beam.Color = ColorSequence.new(color)
-	beam.Width0 = cfg.TracerWidth; beam.Width1 = cfg.TracerWidth
-	beam.Transparency = NumberSequence.new(0)
-	beam.FaceCamera = true
+	local a0, beam
+	if hasTracer then
+		a0 = Instance.new("Attachment", Workspace.Terrain)
+		local a1 = Instance.new("Attachment", root)
+		beam = Instance.new("Beam", Workspace.Terrain)
+		beam.Attachment0 = a0; beam.Attachment1 = a1
+		beam.Color = ColorSequence.new(color)
+		beam.Width0 = cfg.TracerWidth; beam.Width1 = cfg.TracerWidth
+		beam.Transparency = NumberSequence.new(0)
+		beam.FaceCamera = true
+	end
 
-	tracked[listKey][target] = {hl = hl, bb = bb, lbl = lbl, root = root, dynamic = isDynamic, beam = beam, a0 = a0, text = text, col = color}
+	tracked[listKey][target] = {hl = hl, bb = bb, lbl = lbl, root = root, dynamic = isDynamic, beam = beam, a0 = a0, text = text, col = color, hasTracer = hasTracer}
 end
 
 function scanObjects(name, key, col, text)
 	for _, obj in pairs(Workspace:GetDescendants()) do
 		if (obj:IsA("Model") or obj:IsA("BasePart")) and obj.Name == name then
-			addESP(obj, key, col, true, text)
+			addESP(obj, key, col, true, text, true) -- Tracers activos para objetos
 		end
 	end
 end
@@ -581,7 +578,7 @@ function scanGroup(folderName, key, col, text)
 	if folder then
 		for _, obj in pairs(folder:GetDescendants()) do
 			if obj:IsA("Model") and obj:FindFirstChildOfClass("Humanoid") then
-				addESP(obj, key, col, true, text)
+				addESP(obj, key, col, true, text, false) -- SIN tracers para entidades
 			end
 		end
 	end
@@ -594,7 +591,7 @@ function scanCameras()
 	if secCamerasFolder then
 		for _, obj in pairs(secCamerasFolder:GetChildren()) do
 			if obj:IsA("Model") and (obj.Name == "SecurityCamera" or obj.Name:lower():find("camera")) then
-				addESP(obj, "cameras", Color3.fromRGB(255, 240, 50), true, "📷 SecurityCamera\n[Active]")
+				addESP(obj, "cameras", Color3.fromRGB(255, 240, 50), true, "📷 SecurityCamera\n[Active]", true)
 			end
 		end
 	end
@@ -629,10 +626,14 @@ RunService.RenderStepped:Connect(function()
 							data.hl.Enabled = true
 							data.bb.Enabled = true
 
-							-- Control de Tracers (Global vs Cámara Opcional)
-							local shouldShowTracer = cfg.TracersEnabled
-							if key == "cameras" and not cfg.CameraTracers then
-								shouldShowTracer = false
+							-- Control de Tracers exclusivo
+							local shouldShowTracer = false
+							if data.hasTracer then
+								if key == "cameras" then
+									shouldShowTracer = cfg.CameraTracers
+								else
+									shouldShowTracer = cfg.TracersEnabled
+								end
 							end
 
 							if data.beam and data.a0 then
@@ -646,7 +647,6 @@ RunService.RenderStepped:Connect(function()
 							data.hl.FillTransparency = cfg.FillTrans
 							data.lbl.Text = data.text .. "\n[" .. dist .. "m]"
 
-							-- Raycast para ver si se asoma un poquito
 							local rayParams = RaycastParams.new()
 							rayParams.FilterType = Enum.RaycastFilterType.Exclude
 							rayParams.FilterDescendantsInstances = {char, target}
