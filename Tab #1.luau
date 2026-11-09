@@ -12,6 +12,7 @@ if PlayerGui:FindFirstChild("Matcha_ProHub") then
 end
 
 local Camera = Workspace.CurrentCamera
+local ViewportSize = Camera.ViewportSize
 
 -- Estados Globales de Toggles
 local states = {
@@ -27,10 +28,10 @@ local tracked = {
 -- Configuración General
 local cfg = {
 	ShowDistance = true,
-	MaxDistance = 500,        -- Distancia máxima (10m a 2000m)
-	FillTrans = 0.5,         -- Transparencia del Highlight
-	TracersEnabled = true,   -- Tracers globales para objetos/cámaras
-	CameraTracers = true,    -- Tracers específicos para cámaras
+	MaxDistance = 500,
+	FillTrans = 0.5,
+	TracersEnabled = true,   -- Tracers globales (solo para Objetos y Cámaras)
+	CameraTracers = false,
 	TracerWidth = 0.04,
 	TracerColorMode = "Match",
 	CustomTracerColor = Color3.fromRGB(255, 255, 255),
@@ -55,7 +56,7 @@ Instance.new("UICorner", LoadFrame).CornerRadius = UDim.new(0, 8)
 local LoadTitle = Instance.new("TextLabel", LoadFrame)
 LoadTitle.Size = UDim2.new(1, 0, 1, 0)
 LoadTitle.BackgroundTransparency = 1
-LoadTitle.Text = "Matcha - Fixing Camera & Mobile Controls..."
+LoadTitle.Text = "Matcha - Fixing Mobile Touch & Tracers..."
 LoadTitle.TextColor3 = Color3.fromRGB(255, 105, 180)
 LoadTitle.Font = Enum.Font.Code
 LoadTitle.TextSize = 11
@@ -70,12 +71,11 @@ task.wait(0.2)
 LoadGui:Destroy()
 
 --------------------------------------------------------------------------------
--- 2. INTERFAZ PRINCIPAL (LIBRE DE BLOQUEO DE CÁMARA MÓVIL)
+-- 2. INTERFAZ PRINCIPAL
 --------------------------------------------------------------------------------
 local ScreenGui = Instance.new("ScreenGui", PlayerGui)
 ScreenGui.Name = "Matcha_ProHub"
 ScreenGui.ResetOnSpawn = false
-ScreenGui.DisplayOrder = 999
 
 local MainFrame = Instance.new("Frame", ScreenGui)
 MainFrame.Name = "MainFrame"
@@ -90,6 +90,12 @@ Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 6)
 local MainStroke = Instance.new("UIStroke", MainFrame)
 MainStroke.Color = Color3.fromRGB(45, 45, 60)
 MainStroke.Thickness = 1.2
+
+local ModalBtn = Instance.new("TextButton", MainFrame)
+ModalBtn.Size = UDim2.new(0, 0, 0, 0)
+ModalBtn.Visible = true
+ModalBtn.Modal = true
+ModalBtn.Selectable = false
 
 -- Header
 local Header = Instance.new("Frame", MainFrame)
@@ -432,11 +438,11 @@ createHeaderLabel(ESPContainer, "Surveillance")
 createToggle(ESPContainer, "📷 Security Cameras", "cameras", function() scanCameras() end)
 
 createHeaderLabel(ObjContainer, "Valuables")
-createToggle(ObjContainer, "💎 Diamonds (1200)", "diamonds", function() scanObjects("DiamondNecklace", "diamonds", Color3.fromRGB(0, 220, 255), "💎 Diamonds\nPrice: 1200 | Liviano") end)
-createToggle(ObjContainer, "🖼️ Masterpiece (7500)", "masterpiece", function() scanObjects("Masterpiece", "masterpiece", Color3.fromRGB(255, 150, 0), "🖼️ Masterpiece\nPrice: 7500 | Pesado") end)
-createToggle(ObjContainer, "💻 GamingPC (1000-1300)", "gamingpc", function() scanObjects("GamingPC", "gamingpc", Color3.fromRGB(180, 80, 255), "💻 GamingPC\nPrice: 1000-1300 | Pesado") end)
+createToggle(ObjContainer, "💎 Diamonds (1200)", "diamonds", function() scanObjects("DiamondNecklace", "diamonds", Color3.fromRGB(0, 220, 255), "💎 Diamonds\nPrice: 1200 | Liviano", true) end)
+createToggle(ObjContainer, "🖼️ Masterpiece (7500)", "masterpiece", function() scanObjects("Masterpiece", "masterpiece", Color3.fromRGB(255, 150, 0), "🖼️ Masterpiece\nPrice: 7500 | Pesado", true) end)
+createToggle(ObjContainer, "💻 GamingPC (1000-1300)", "gamingpc", function() scanObjects("GamingPC", "gamingpc", Color3.fromRGB(180, 80, 255), "💻 GamingPC\nPrice: 1000-1300 | Pesado", true) end)
 createHeaderLabel(ObjContainer, "Safes")
-createToggle(ObjContainer, "🔐 Safes", "safes", function() scanObjects("Safe", "safes", Color3.fromRGB(50, 255, 120), "🔐 Safe") end)
+createToggle(ObjContainer, "🔐 Safes", "safes", function() scanObjects("Safe", "safes", Color3.fromRGB(50, 255, 120), "🔐 Safe", true) end)
 
 createHeaderLabel(SetContainer, "Themes & Colors")
 createDropdown(SetContainer, "🎨 Select UI Theme", {
@@ -453,17 +459,17 @@ createSlider(SetContainer, "Fill Transparency", 0.00, 1.00, cfg.FillTrans, false
 createSlider(SetContainer, "Tracer Line Width", 0.01, 0.15, cfg.TracerWidth, false, function(val) cfg.TracerWidth = val end)
 
 createHeaderLabel(SetContainer, "Camera & Tracer Options")
-createDropdown(SetContainer, "⚡ Objects Tracers Toggle", {
+createDropdown(SetContainer, "⚡ Global Tracers Toggle", {
 	{Name = "Tracers: Enabled", Callback = function() cfg.TracersEnabled = true end},
 	{Name = "Tracers: Disabled", Callback = function() cfg.TracersEnabled = false end}
 })
 createDropdown(SetContainer, "📷 Camera Tracers Toggle", {
-	{Name = "Camera Tracers: ON", Callback = function() cfg.CameraTracers = true end},
-	{Name = "Camera Tracers: OFF", Callback = function() cfg.CameraTracers = false end}
+	{Name = "Camera Tracers: OFF", Callback = function() cfg.CameraTracers = false end},
+	{Name = "Camera Tracers: ON", Callback = function() cfg.CameraTracers = true end}
 })
 
 --------------------------------------------------------------------------------
--- DRAG, RESIZE Y CIERRE
+-- 6. SISTEMA DE DRAG INTELIGENTE CON LÍMITE DE PANTALLA (CLAMP)
 --------------------------------------------------------------------------------
 local ResizeGrip = Instance.new("Frame", MainFrame)
 ResizeGrip.Size = UDim2.new(0, 12, 0, 12)
@@ -477,12 +483,12 @@ local dragStart, startPos, resizeStart, startSize
 
 Header.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		dragging = true; dragStart = input.Position; startPos = MainFrame.Position
+		dragging = true; dragStart = input.Position; startPos = MainFrame.AbsolutePosition
 	end
 end)
 
 ResizeGrip.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 		resizing = true; resizeStart = input.Position; startSize = MainFrame.Size
 	end
 end)
@@ -490,15 +496,26 @@ end)
 UserInputService.InputChanged:Connect(function(input)
 	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 		local delta = input.Position - dragStart
-		MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-	elseif resizing and input.UserInputType == Enum.UserInputType.MouseMovement then
+		local newX = startPos.X + delta.X
+		local newY = startPos.Y + delta.Y
+		
+		-- Límite estricto para que el panel no salga de la pantalla en PC/Celular
+		local currentViewport = Camera.ViewportSize
+		newX = math.clamp(newX, 0, currentViewport.X - MainFrame.AbsoluteSize.X)
+		newY = math.clamp(newY, 0, currentViewport.Y - MainFrame.AbsoluteSize.Y)
+		
+		MainFrame.Position = UDim2.new(0, newX, 0, newY)
+		
+	elseif resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 		local delta = input.Position - resizeStart
 		MainFrame.Size = UDim2.new(0, math.clamp(startSize.X.Offset + delta.X, 300, 450), 0, math.clamp(startSize.Y.Offset + delta.Y, 400, 650))
 	end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false; resizing = false end
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = false; resizing = false
+	end
 end)
 
 CloseBtn.MouseButton1Click:Connect(function()
@@ -521,7 +538,7 @@ MinimizeBtn.MouseButton1Click:Connect(function()
 end)
 
 --------------------------------------------------------------------------------
--- 6. LÓGICA DE ESP Y TRACERS (SOLO OBJETOS Y CÁMARAS)
+-- 7. LÓGICA DE ESP Y TRACERS EXCLUSIVOS (OBJETOS Y CÁMARAS)
 --------------------------------------------------------------------------------
 function addESP(target, listKey, color, isDynamic, text, hasTracer)
 	if tracked[listKey][target] then return end
@@ -550,7 +567,7 @@ function addESP(target, listKey, color, isDynamic, text, hasTracer)
 	lbl.TextSize = 11
 	bb.Parent = target
 
-	local a0, beam
+	local a0, beam = nil, nil
 	if hasTracer then
 		a0 = Instance.new("Attachment", Workspace.Terrain)
 		local a1 = Instance.new("Attachment", root)
@@ -562,13 +579,13 @@ function addESP(target, listKey, color, isDynamic, text, hasTracer)
 		beam.FaceCamera = true
 	end
 
-	tracked[listKey][target] = {hl = hl, bb = bb, lbl = lbl, root = root, dynamic = isDynamic, beam = beam, a0 = a0, text = text, col = color, hasTracer = hasTracer}
+	tracked[listKey][target] = {hl = hl, bb = bb, lbl = lbl, root = root, dynamic = isDynamic, beam = beam, a0 = a0, text = text, col = color, isObjectTracer = hasTracer}
 end
 
-function scanObjects(name, key, col, text)
+function scanObjects(name, key, col, text, hasTracer)
 	for _, obj in pairs(Workspace:GetDescendants()) do
 		if (obj:IsA("Model") or obj:IsA("BasePart")) and obj.Name == name then
-			addESP(obj, key, col, true, text, true) -- Tracers activos para objetos
+			addESP(obj, key, col, true, text, hasTracer)
 		end
 	end
 end
@@ -578,7 +595,7 @@ function scanGroup(folderName, key, col, text)
 	if folder then
 		for _, obj in pairs(folder:GetDescendants()) do
 			if obj:IsA("Model") and obj:FindFirstChildOfClass("Humanoid") then
-				addESP(obj, key, col, true, text, false) -- SIN tracers para entidades
+				addESP(obj, key, col, true, text, false) -- Sin tracers para entidades
 			end
 		end
 	end
@@ -607,10 +624,10 @@ RunService.RenderStepped:Connect(function()
 	for key, isAct in pairs(states) do
 		if isAct then
 			if next(tracked[key]) == nil then
-				if key == "diamonds" then scanObjects("DiamondNecklace", "diamonds", Color3.fromRGB(0, 220, 255), "💎 Diamonds\nPrice: 1200 | Liviano")
-				elseif key == "masterpiece" then scanObjects("Masterpiece", "masterpiece", Color3.fromRGB(255, 150, 0), "🖼️ Masterpiece\nPrice: 7500 | Pesado")
-				elseif key == "gamingpc" then scanObjects("GamingPC", "gamingpc", Color3.fromRGB(180, 80, 255), "💻 GamingPC\nPrice: 1000-1300 | Pesado")
-				elseif key == "safes" then scanObjects("Safe", "safes", Color3.fromRGB(50, 255, 120), "🔐 Safe")
+				if key == "diamonds" then scanObjects("DiamondNecklace", "diamonds", Color3.fromRGB(0, 220, 255), "💎 Diamonds\nPrice: 1200 | Liviano", true)
+				elseif key == "masterpiece" then scanObjects("Masterpiece", "masterpiece", Color3.fromRGB(255, 150, 0), "🖼️ Masterpiece\nPrice: 7500 | Pesado", true)
+				elseif key == "gamingpc" then scanObjects("GamingPC", "gamingpc", Color3.fromRGB(180, 80, 255), "💻 GamingPC\nPrice: 1000-1300 | Pesado", true)
+				elseif key == "safes" then scanObjects("Safe", "safes", Color3.fromRGB(50, 255, 120), "🔐 Safe", true)
 				elseif key == "guards" then scanGroup("Guards", "guards", Color3.fromRGB(50, 255, 100), "⬛ Guards")
 				elseif key == "npcs" then scanGroup("Npcs", "npcs", Color3.fromRGB(50, 255, 100), "⬜ NPCs")
 				elseif key == "police" then scanGroup("Police", "police", Color3.fromRGB(50, 255, 100), "🔵 Police")
@@ -626,18 +643,14 @@ RunService.RenderStepped:Connect(function()
 							data.hl.Enabled = true
 							data.bb.Enabled = true
 
-							-- Control de Tracers exclusivo
-							local shouldShowTracer = false
-							if data.hasTracer then
-								if key == "cameras" then
-									shouldShowTracer = cfg.CameraTracers
-								else
-									shouldShowTracer = cfg.TracersEnabled
+							-- Gestión de Tracers (Exclusivo para Objetos y Cámaras)
+							if data.isObjectTracer and data.beam and data.a0 then
+								local showTracer = cfg.TracersEnabled
+								if key == "cameras" and not cfg.CameraTracers then
+									showTracer = false
 								end
-							end
 
-							if data.beam and data.a0 then
-								data.beam.Enabled = shouldShowTracer
+								data.beam.Enabled = showTracer
 								data.a0.WorldPosition = bottomScreenPos
 								data.beam.Width0 = cfg.TracerWidth
 								data.beam.Width1 = cfg.TracerWidth
