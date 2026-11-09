@@ -3,6 +3,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
@@ -12,33 +13,96 @@ if PlayerGui:FindFirstChild("Matcha_ProHub") then
 end
 
 local Camera = Workspace.CurrentCamera
-local ViewportSize = Camera.ViewportSize
 
--- Estados Globales de Toggles
+-- Estados Globales de Toggles (Incluye GoldBar)
 local states = {
-	diamonds = false, masterpiece = false, gamingpc = false, safes = false,
+	diamonds = false, masterpiece = false, gamingpc = false, goldbar = false, safes = false,
 	guards = false, npcs = false, police = false, cameras = false
 }
 
 local tracked = {
-	diamonds = {}, masterpiece = {}, gamingpc = {}, safes = {},
+	diamonds = {}, masterpiece = {}, gamingpc = {}, goldbar = {}, safes = {},
 	guards = {}, npcs = {}, police = {}, cameras = {}
 }
 
--- Configuración General
+-- Configuración General por Defecto
 local cfg = {
 	ShowDistance = true,
 	MaxDistance = 500,
 	FillTrans = 0.5,
-	TracersEnabled = true,   -- Tracers globales (solo para Objetos y Cámaras)
+	TracersEnabled = true,
 	CameraTracers = false,
 	TracerWidth = 0.04,
 	TracerColorMode = "Match",
 	CustomTracerColor = Color3.fromRGB(255, 255, 255),
 	ThemeMode = "Purple",
-	BaseColor = Color3.fromRGB(160, 80, 255),
-	DarkColor = Color3.fromRGB(60, 20, 100)
+	BaseColor = Color3.fromRGB(160, 80, 255)
 }
+
+-- Referencias dinámicas de UI para animación de colores
+local uiElements = {
+	title = nil,
+	stroke = nil,
+	sliderFills = {}
+}
+
+local function animateThemeVisuals(targetColor)
+	local tweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	if uiElements.title then
+		TweenService:Create(uiElements.title, tweenInfo, {TextColor3 = targetColor}):Play()
+	end
+	if uiElements.stroke then
+		TweenService:Create(uiElements.stroke, tweenInfo, {Color = targetColor}):Play()
+	end
+	for _, fill in ipairs(uiElements.sliderFills) do
+		if fill and fill.Parent then
+			TweenService:Create(fill, tweenInfo, {BackgroundColor3 = targetColor}):Play()
+		end
+	end
+end
+
+-- SISTEMA DE AUTOGUARDADO DE CONFIGURACIÓN
+local CONFIG_FILE = "Matcha_Config.json"
+
+local function saveConfig()
+	local success, encoded = pcall(function()
+		return HttpService:JSONEncode({
+			MaxDistance = cfg.MaxDistance,
+			FillTrans = cfg.FillTrans,
+			TracersEnabled = cfg.TracersEnabled,
+			CameraTracers = cfg.CameraTracers,
+			TracerWidth = cfg.TracerWidth,
+			ThemeMode = cfg.ThemeMode,
+			BaseColorR = cfg.BaseColor.R,
+			BaseColorG = cfg.BaseColor.G,
+			BaseColorB = cfg.BaseColor.B
+		})
+	end)
+	if success and writefile then
+		pcall(function() writefile(CONFIG_FILE, encoded) end)
+	end
+end
+
+local function loadConfig()
+	if readfile and isfile and isfile(CONFIG_FILE) then
+		local success, decoded = pcall(function()
+			return HttpService:JSONDecode(readfile(CONFIG_FILE))
+		end)
+		if success and decoded then
+			cfg.MaxDistance = decoded.MaxDistance or cfg.MaxDistance
+			cfg.FillTrans = decoded.FillTrans or cfg.FillTrans
+			cfg.TracersEnabled = decoded.TracersEnabled ~= nil and decoded.TracersEnabled or cfg.TracersEnabled
+			cfg.CameraTracers = decoded.CameraTracers ~= nil and decoded.CameraTracers or cfg.CameraTracers
+			cfg.TracerWidth = decoded.TracerWidth or cfg.TracerWidth
+			cfg.ThemeMode = decoded.ThemeMode or cfg.ThemeMode
+			if decoded.BaseColorR then
+				cfg.BaseColor = Color3.new(decoded.BaseColorR, decoded.BaseColorG, decoded.BaseColorB)
+			end
+		end
+	end
+end
+
+loadConfig()
 
 --------------------------------------------------------------------------------
 -- 1. PANTALLA DE CARGA
@@ -56,10 +120,10 @@ Instance.new("UICorner", LoadFrame).CornerRadius = UDim.new(0, 8)
 local LoadTitle = Instance.new("TextLabel", LoadFrame)
 LoadTitle.Size = UDim2.new(1, 0, 1, 0)
 LoadTitle.BackgroundTransparency = 1
-LoadTitle.Text = "Matcha - Fixing Mobile Touch & Tracers..."
+LoadTitle.Text = "Matcha - GoldBar & Smooth Themes Loaded..."
 LoadTitle.TextColor3 = Color3.fromRGB(255, 105, 180)
 LoadTitle.Font = Enum.Font.Code
-LoadTitle.TextSize = 11
+LoadTitle.TextSize = 10
 LoadTitle.TextTransparency = 1
 
 TweenService:Create(LoadFrame, TweenInfo.new(0.3), {BackgroundTransparency = 0.1}):Play()
@@ -76,6 +140,7 @@ LoadGui:Destroy()
 local ScreenGui = Instance.new("ScreenGui", PlayerGui)
 ScreenGui.Name = "Matcha_ProHub"
 ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
 
 local MainFrame = Instance.new("Frame", ScreenGui)
 MainFrame.Name = "MainFrame"
@@ -88,14 +153,9 @@ MainFrame.ClipsDescendants = false
 Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 6)
 
 local MainStroke = Instance.new("UIStroke", MainFrame)
-MainStroke.Color = Color3.fromRGB(45, 45, 60)
+MainStroke.Color = cfg.BaseColor
 MainStroke.Thickness = 1.2
-
-local ModalBtn = Instance.new("TextButton", MainFrame)
-ModalBtn.Size = UDim2.new(0, 0, 0, 0)
-ModalBtn.Visible = true
-ModalBtn.Modal = true
-ModalBtn.Selectable = false
+uiElements.stroke = MainStroke
 
 -- Header
 local Header = Instance.new("Frame", MainFrame)
@@ -113,6 +173,7 @@ Title.TextColor3 = cfg.BaseColor
 Title.Font = Enum.Font.Code
 Title.TextSize = 13
 Title.TextXAlignment = Enum.TextXAlignment.Left
+uiElements.title = Title
 
 local rainbowHue = 0
 RunService.RenderStepped:Connect(function(dt)
@@ -121,6 +182,9 @@ RunService.RenderStepped:Connect(function(dt)
 		local rainbowColor = Color3.fromHSV(rainbowHue, 0.8, 1)
 		Title.TextColor3 = rainbowColor
 		MainStroke.Color = rainbowColor
+		for _, fill in ipairs(uiElements.sliderFills) do
+			if fill and fill.Parent then fill.BackgroundColor3 = rainbowColor end
+		end
 	end
 end)
 
@@ -215,7 +279,7 @@ ObjTabBtn.MouseButton1Click:Connect(function() switchTab(ObjTabBtn, ObjContainer
 SetTabBtn.MouseButton1Click:Connect(function() switchTab(SetTabBtn, SetContainer) end)
 
 --------------------------------------------------------------------------------
--- 4. FUNCIONES DE LIMPIEZA Y COMPONENTES
+-- 4. FUNCIONES DE UI
 --------------------------------------------------------------------------------
 local function clearGroup(key)
 	for target, data in pairs(tracked[key]) do
@@ -264,11 +328,13 @@ local function createSlider(parent, titleText, minVal, maxVal, defaultVal, isInt
 	Instance.new("UICorner", trackBg).CornerRadius = UDim.new(1, 0)
 
 	local trackFill = Instance.new("Frame", trackBg)
-	local initScale = (defaultVal - minVal) / (maxVal - minVal)
+	local initScale = math.clamp((defaultVal - minVal) / (maxVal - minVal), 0, 1)
 	trackFill.Size = UDim2.new(initScale, 0, 1, 0)
 	trackFill.BackgroundColor3 = cfg.BaseColor
 	trackFill.Selectable = false
 	Instance.new("UICorner", trackFill).CornerRadius = UDim.new(1, 0)
+	
+	table.insert(uiElements.sliderFills, trackFill)
 
 	local knob = Instance.new("Frame", trackFill)
 	knob.Size = UDim2.new(0, 12, 0, 12)
@@ -290,6 +356,7 @@ local function createSlider(parent, titleText, minVal, maxVal, defaultVal, isInt
 		
 		valueLabel.Text = isInteger and string.format("%d / %d", currentVal, maxVal) or string.format("%.2f / %.2f", currentVal, maxVal)
 		callback(currentVal)
+		saveConfig()
 	end
 
 	trackBg.InputBegan:Connect(function(input)
@@ -423,6 +490,7 @@ local function createDropdown(parent, titleText, options)
 			isOpen = false
 			btn.Text = titleText .. " ▼"
 			TweenService:Create(dropFrame, TweenInfo.new(0.2), {Size = UDim2.new(1, 0, 0, 32)}):Play()
+			saveConfig()
 		end)
 	end
 end
@@ -441,16 +509,18 @@ createHeaderLabel(ObjContainer, "Valuables")
 createToggle(ObjContainer, "💎 Diamonds (1200)", "diamonds", function() scanObjects("DiamondNecklace", "diamonds", Color3.fromRGB(0, 220, 255), "💎 Diamonds\nPrice: 1200 | Liviano", true) end)
 createToggle(ObjContainer, "🖼️ Masterpiece (7500)", "masterpiece", function() scanObjects("Masterpiece", "masterpiece", Color3.fromRGB(255, 150, 0), "🖼️ Masterpiece\nPrice: 7500 | Pesado", true) end)
 createToggle(ObjContainer, "💻 GamingPC (1000-1300)", "gamingpc", function() scanObjects("GamingPC", "gamingpc", Color3.fromRGB(180, 80, 255), "💻 GamingPC\nPrice: 1000-1300 | Pesado", true) end)
+createToggle(ObjContainer, "🥇 GoldBar (1500)", "goldbar", function() scanObjects("GoldBar", "goldbar", Color3.fromRGB(255, 215, 0), "🥇 GoldBar\nPrice: 1500 | Liviano", true) end)
+
 createHeaderLabel(ObjContainer, "Safes")
 createToggle(ObjContainer, "🔐 Safes", "safes", function() scanObjects("Safe", "safes", Color3.fromRGB(50, 255, 120), "🔐 Safe", true) end)
 
 createHeaderLabel(SetContainer, "Themes & Colors")
 createDropdown(SetContainer, "🎨 Select UI Theme", {
 	{Name = "Rainbow Dynamic (RGB)", Callback = function() cfg.ThemeMode = "Rainbow" end},
-	{Name = "Red / Crimson Tactical", Callback = function() cfg.ThemeMode = "Red"; cfg.BaseColor = Color3.fromRGB(230, 40, 40); cfg.DarkColor = Color3.fromRGB(90, 10, 10); Title.TextColor3 = cfg.BaseColor; MainStroke.Color = cfg.BaseColor end},
-	{Name = "Purple Matcha", Callback = function() cfg.ThemeMode = "Purple"; cfg.BaseColor = Color3.fromRGB(160, 80, 255); cfg.DarkColor = Color3.fromRGB(60, 20, 100); Title.TextColor3 = cfg.BaseColor; MainStroke.Color = Color3.fromRGB(45, 45, 60) end},
-	{Name = "Pink Matcha", Callback = function() cfg.ThemeMode = "Pink"; cfg.BaseColor = Color3.fromRGB(255, 105, 180); cfg.DarkColor = Color3.fromRGB(120, 30, 80); Title.TextColor3 = cfg.BaseColor; MainStroke.Color = Color3.fromRGB(45, 45, 60) end},
-	{Name = "Cyber Cyan", Callback = function() cfg.ThemeMode = "Cyan"; cfg.BaseColor = Color3.fromRGB(0, 220, 255); cfg.DarkColor = Color3.fromRGB(0, 80, 120); Title.TextColor3 = cfg.BaseColor; MainStroke.Color = Color3.fromRGB(45, 45, 60) end}
+	{Name = "Red / Crimson Tactical", Callback = function() cfg.ThemeMode = "Red"; cfg.BaseColor = Color3.fromRGB(230, 40, 40); animateThemeVisuals(cfg.BaseColor) end},
+	{Name = "Purple Matcha", Callback = function() cfg.ThemeMode = "Purple"; cfg.BaseColor = Color3.fromRGB(160, 80, 255); animateThemeVisuals(cfg.BaseColor) end},
+	{Name = "Pink Matcha", Callback = function() cfg.ThemeMode = "Pink"; cfg.BaseColor = Color3.fromRGB(255, 105, 180); animateThemeVisuals(cfg.BaseColor) end},
+	{Name = "Cyber Cyan", Callback = function() cfg.ThemeMode = "Cyan"; cfg.BaseColor = Color3.fromRGB(0, 220, 255); animateThemeVisuals(cfg.BaseColor) end}
 })
 
 createHeaderLabel(SetContainer, "Interactive Sliders")
@@ -468,8 +538,11 @@ createDropdown(SetContainer, "📷 Camera Tracers Toggle", {
 	{Name = "Camera Tracers: ON", Callback = function() cfg.CameraTracers = true end}
 })
 
+-- Aplicar colores iniciales cargados
+animateThemeVisuals(cfg.BaseColor)
+
 --------------------------------------------------------------------------------
--- 6. SISTEMA DE DRAG INTELIGENTE CON LÍMITE DE PANTALLA (CLAMP)
+-- 6. SISTEMA DE DRAG CON LÍMITE DE PANTALLA (CLAMP)
 --------------------------------------------------------------------------------
 local ResizeGrip = Instance.new("Frame", MainFrame)
 ResizeGrip.Size = UDim2.new(0, 12, 0, 12)
@@ -499,7 +572,6 @@ UserInputService.InputChanged:Connect(function(input)
 		local newX = startPos.X + delta.X
 		local newY = startPos.Y + delta.Y
 		
-		-- Límite estricto para que el panel no salga de la pantalla en PC/Celular
 		local currentViewport = Camera.ViewportSize
 		newX = math.clamp(newX, 0, currentViewport.X - MainFrame.AbsoluteSize.X)
 		newY = math.clamp(newY, 0, currentViewport.Y - MainFrame.AbsoluteSize.Y)
@@ -538,12 +610,13 @@ MinimizeBtn.MouseButton1Click:Connect(function()
 end)
 
 --------------------------------------------------------------------------------
--- 7. LÓGICA DE ESP Y TRACERS EXCLUSIVOS (OBJETOS Y CÁMARAS)
+-- 7. LÓGICA ESTRICTA: UN SOLO BILLBOARD Y HIGHLIGHT POR MODELO ENTERO
 --------------------------------------------------------------------------------
 function addESP(target, listKey, color, isDynamic, text, hasTracer)
+	if not target:IsA("Model") then return end
 	if tracked[listKey][target] then return end
 	
-	local root = target:IsA("Model") and (target:FindFirstChild("Hitbox") or target:FindFirstChild("Cabeza") or target:FindFirstChild("Base") or target.PrimaryPart or target:FindFirstChildWhichIsA("BasePart")) or (target:IsA("BasePart") and target)
+	local root = target.PrimaryPart or target:FindFirstChild("Hitbox") or target:FindFirstChild("Cabeza") or target:FindFirstChild("Base") or target:FindFirstChildWhichIsA("BasePart")
 	if not root then return end
 
 	local hl = Instance.new("Highlight")
@@ -556,7 +629,7 @@ function addESP(target, listKey, color, isDynamic, text, hasTracer)
 	local bb = Instance.new("BillboardGui")
 	bb.Adornee = root
 	bb.Size = UDim2.new(0, 180, 0, 50)
-	bb.StudsOffset = Vector3.new(0, 3, 0)
+	bb.StudsOffset = Vector3.new(0, 2.5, 0)
 	bb.AlwaysOnTop = true
 
 	local lbl = Instance.new("TextLabel", bb)
@@ -565,7 +638,7 @@ function addESP(target, listKey, color, isDynamic, text, hasTracer)
 	lbl.TextColor3 = color
 	lbl.Font = Enum.Font.Code
 	lbl.TextSize = 11
-	bb.Parent = target
+	bb.Parent = root
 
 	local a0, beam = nil, nil
 	if hasTracer then
@@ -584,8 +657,10 @@ end
 
 function scanObjects(name, key, col, text, hasTracer)
 	for _, obj in pairs(Workspace:GetDescendants()) do
-		if (obj:IsA("Model") or obj:IsA("BasePart")) and obj.Name == name then
-			addESP(obj, key, col, true, text, hasTracer)
+		if obj:IsA("Model") and obj.Name == name then
+			if not tracked[key][obj] then
+				addESP(obj, key, col, true, text, hasTracer)
+			end
 		end
 	end
 end
@@ -595,7 +670,9 @@ function scanGroup(folderName, key, col, text)
 	if folder then
 		for _, obj in pairs(folder:GetDescendants()) do
 			if obj:IsA("Model") and obj:FindFirstChildOfClass("Humanoid") then
-				addESP(obj, key, col, true, text, false) -- Sin tracers para entidades
+				if not tracked[key][obj] then
+					addESP(obj, key, col, true, text, false)
+				end
 			end
 		end
 	end
@@ -608,7 +685,9 @@ function scanCameras()
 	if secCamerasFolder then
 		for _, obj in pairs(secCamerasFolder:GetChildren()) do
 			if obj:IsA("Model") and (obj.Name == "SecurityCamera" or obj.Name:lower():find("camera")) then
-				addESP(obj, "cameras", Color3.fromRGB(255, 240, 50), true, "📷 SecurityCamera\n[Active]", true)
+				if not tracked["cameras"][obj] then
+					addESP(obj, "cameras", Color3.fromRGB(255, 240, 50), true, "📷 SecurityCamera\n[Active]", true)
+				end
 			end
 		end
 	end
@@ -627,6 +706,7 @@ RunService.RenderStepped:Connect(function()
 				if key == "diamonds" then scanObjects("DiamondNecklace", "diamonds", Color3.fromRGB(0, 220, 255), "💎 Diamonds\nPrice: 1200 | Liviano", true)
 				elseif key == "masterpiece" then scanObjects("Masterpiece", "masterpiece", Color3.fromRGB(255, 150, 0), "🖼️ Masterpiece\nPrice: 7500 | Pesado", true)
 				elseif key == "gamingpc" then scanObjects("GamingPC", "gamingpc", Color3.fromRGB(180, 80, 255), "💻 GamingPC\nPrice: 1000-1300 | Pesado", true)
+				elseif key == "goldbar" then scanObjects("GoldBar", "goldbar", Color3.fromRGB(255, 215, 0), "🥇 GoldBar\nPrice: 1500 | Liviano", true)
 				elseif key == "safes" then scanObjects("Safe", "safes", Color3.fromRGB(50, 255, 120), "🔐 Safe", true)
 				elseif key == "guards" then scanGroup("Guards", "guards", Color3.fromRGB(50, 255, 100), "⬛ Guards")
 				elseif key == "npcs" then scanGroup("Npcs", "npcs", Color3.fromRGB(50, 255, 100), "⬜ NPCs")
@@ -643,7 +723,6 @@ RunService.RenderStepped:Connect(function()
 							data.hl.Enabled = true
 							data.bb.Enabled = true
 
-							-- Gestión de Tracers (Exclusivo para Objetos y Cámaras)
 							if data.isObjectTracer and data.beam and data.a0 then
 								local showTracer = cfg.TracersEnabled
 								if key == "cameras" and not cfg.CameraTracers then
